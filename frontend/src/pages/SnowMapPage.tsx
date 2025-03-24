@@ -2,6 +2,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 
 import axios from 'axios';
+import * as d3 from 'd3';
 import L from 'leaflet';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -58,6 +59,8 @@ const SnowMapPage: React.FC = () => {
   // States
   const [startYear, setStartYear] = useState<number>(2018);
   const [endYear, setEndYear] = useState<number>(2023);
+  const [startMonth, setStartMonth] = useState<number>(1);
+  const [endMonth, setEndMonth] = useState<number>(12);
   const [drawnPolygon, setDrawnPolygon] = useState<any>(null);
   const [selectedData, setSelectedData] = useState<SnowData[] | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -70,6 +73,9 @@ const SnowMapPage: React.FC = () => {
 
   // Ref for the map
   const mapRef = useRef<L.Map | null>(null);
+
+  // Ref for the chart
+  const chartRef = useRef<HTMLDivElement>(null);
 
   // Fix for the default marker icons
   useEffect(() => {
@@ -133,8 +139,8 @@ const SnowMapPage: React.FC = () => {
           type: 'Polygon',
           coordinates: [drawnPolygon.latlngs],
         },
-        start_date: `${startYear}-01-01`,
-        end_date: `${endYear}-12-31`,
+        start_date: `${startYear}-${String(startMonth).padStart(2, '0')}-01`,
+        end_date: `${endYear}-${String(endMonth).padStart(2, '0')}-${endMonth === 2 ? '28' : '30'}`,
       };
 
       // Call backend API with full URL since we're not using proxy
@@ -206,7 +212,159 @@ const SnowMapPage: React.FC = () => {
     }).format(date);
   };
 
+  // Convert m² to km²
+  const sqmToSqkm = (valueInSqm: number): number => {
+    return valueInSqm / 1000000;
+  };
+
+  // Draw the chart using D3
+  useEffect(() => {
+    if (selectedData && selectedData.length > 0 && chartRef.current) {
+      // Clear previous chart if any
+      d3.select(chartRef.current).selectAll('*').remove();
+
+      // Format data for the chart
+      const chartData = selectedData.map((item) => ({
+        date: new Date(item.date),
+        snowArea: sqmToSqkm(item.snow_area_m2),
+        totalArea: sqmToSqkm(item.total_area_m2),
+      }));
+
+      // Sort data by date
+      chartData.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      // Get the maximum total area for y-axis scale
+      const maxTotalArea = d3.max(chartData, (d) => d.totalArea) as number;
+
+      // Set dimensions and margins
+      const margin = { top: 20, right: 30, bottom: 50, left: 60 };
+      const width = chartRef.current.clientWidth - margin.left - margin.right;
+      const height = 300 - margin.top - margin.bottom;
+
+      // Create SVG
+      const svg = d3
+        .select(chartRef.current)
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+      // Create scales
+      const xScale = d3
+        .scaleTime()
+        .domain(d3.extent(chartData, (d) => d.date) as [Date, Date])
+        .range([0, width]);
+
+      // Set y-axis scale from 0 to max total area
+      const yScale = d3
+        .scaleLinear()
+        .domain([0, maxTotalArea * 1.1]) // Add 10% padding at the top
+        .range([height, 0]);
+
+      // Create line for snow area
+      const line = d3
+        .line<{ date: Date; snowArea: number }>()
+        .x((d) => xScale(d.date))
+        .y((d) => yScale(d.snowArea));
+
+      // Create axes
+      const xAxis = d3.axisBottom(xScale);
+      const yAxis = d3.axisLeft(yScale);
+
+      // Add X axis
+      svg
+        .append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(xAxis)
+        .selectAll('text')
+        .style('text-anchor', 'end')
+        .attr('dx', '-.8em')
+        .attr('dy', '.15em')
+        .attr('transform', 'rotate(-45)');
+
+      // Add Y axis
+      svg.append('g').call(yAxis);
+
+      // Add line path for snow area
+      svg
+        .append('path')
+        .datum(chartData)
+        .attr('fill', 'none')
+        .attr('stroke', 'steelblue')
+        .attr('stroke-width', 2)
+        .attr('d', line);
+
+      // Add dots for data points
+      svg
+        .selectAll('circle')
+        .data(chartData)
+        .enter()
+        .append('circle')
+        .attr('cx', (d) => xScale(d.date))
+        .attr('cy', (d) => yScale(d.snowArea))
+        .attr('r', 5)
+        .attr('fill', 'steelblue');
+
+      // Add total area reference line if all total areas are equal
+      if (chartData.every((d) => d.totalArea === chartData[0].totalArea)) {
+        // Add horizontal line for total area
+        svg
+          .append('line')
+          .attr('x1', 0)
+          .attr('x2', width)
+          .attr('y1', yScale(chartData[0].totalArea))
+          .attr('y2', yScale(chartData[0].totalArea))
+          .attr('stroke', 'rgba(255, 100, 100, 0.5)')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '5,5');
+
+        // Add label for total area line
+        svg
+          .append('text')
+          .attr('x', width - 5)
+          .attr('y', yScale(chartData[0].totalArea) - 5)
+          .attr('text-anchor', 'end')
+          .attr('fill', 'rgba(255, 100, 100, 0.8)')
+          .text(`Área Total: ${chartData[0].totalArea.toFixed(2)} km²`);
+      }
+
+      // Add axis labels
+      svg
+        .append('text')
+        .attr(
+          'transform',
+          `translate(${width / 2}, ${height + margin.bottom - 5})`
+        )
+        .style('text-anchor', 'middle')
+        .text('Fecha');
+
+      svg
+        .append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('y', -margin.left + 15)
+        .attr('x', -(height / 2))
+        .attr('dy', '1em')
+        .style('text-anchor', 'middle')
+        .text('Área (km²)');
+    }
+  }, [selectedData]);
+
   const years = Array.from({ length: 6 }, (_, i) => 2018 + i);
+  const months = [
+    { value: 1, label: 'Enero' },
+    { value: 2, label: 'Febrero' },
+    { value: 3, label: 'Marzo' },
+    { value: 4, label: 'Abril' },
+    { value: 5, label: 'Mayo' },
+    { value: 6, label: 'Junio' },
+    { value: 7, label: 'Julio' },
+    { value: 8, label: 'Agosto' },
+    { value: 9, label: 'Septiembre' },
+    { value: 10, label: 'Octubre' },
+    { value: 11, label: 'Noviembre' },
+    { value: 12, label: 'Diciembre' },
+  ];
 
   // Group results by year for display
   const groupedByYear = selectedData
@@ -369,6 +527,23 @@ const SnowMapPage: React.FC = () => {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mes de inicio
+            </label>
+            <select
+              className="w-full p-2 border border-gray-300 rounded-md"
+              value={startMonth}
+              onChange={(e) => setStartMonth(parseInt(e.target.value))}
+            >
+              {months.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Año de fin
             </label>
             <select
@@ -377,8 +552,36 @@ const SnowMapPage: React.FC = () => {
               onChange={(e) => setEndYear(parseInt(e.target.value))}
             >
               {years.map((year) => (
-                <option key={year} value={year} disabled={year < startYear}>
+                <option
+                  key={year}
+                  value={year}
+                  disabled={
+                    year < startYear ||
+                    (year === startYear && endMonth < startMonth)
+                  }
+                >
                   {year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mes de fin
+            </label>
+            <select
+              className="w-full p-2 border border-gray-300 rounded-md"
+              value={endMonth}
+              onChange={(e) => setEndMonth(parseInt(e.target.value))}
+            >
+              {months.map((month) => (
+                <option
+                  key={month.value}
+                  value={month.value}
+                  disabled={endYear === startYear && month.value < startMonth}
+                >
+                  {month.label}
                 </option>
               ))}
             </select>
@@ -415,10 +618,10 @@ const SnowMapPage: React.FC = () => {
                     Fecha
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nieve (m²)
+                    Nieve (km²)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Área Total (m²)
+                    Área Total (km²)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Porcentaje
@@ -444,10 +647,10 @@ const SnowMapPage: React.FC = () => {
                         {formatDate(item.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                        {item.snow_area_m2.toLocaleString()} m²
+                        {sqmToSqkm(item.snow_area_m2).toFixed(3)} km²
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                        {item.total_area_m2.toLocaleString()} m²
+                        {sqmToSqkm(item.total_area_m2).toFixed(3)} km²
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500">
                         {(
@@ -487,6 +690,17 @@ const SnowMapPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Snow Coverage Chart */}
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold mb-3">
+              Evolución de la Cobertura de Nieve a lo Largo del Tiempo
+            </h3>
+            <div
+              ref={chartRef}
+              className="w-full h-[300px] border border-gray-200 rounded-lg p-2"
+            ></div>
           </div>
         </div>
       )}

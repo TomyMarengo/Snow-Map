@@ -6,67 +6,65 @@ const HomePage: React.FC = () => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50 p-8">
       <div className="w-full max-w-screen-2xl">
-        {/* Sección de Bienvenida */}
+        {/* Welcome Section */}
         <section className="mb-36">
-          <h1 className="text-6xl font-bold text-center mb-4">Bienvenido!</h1>
+          <h1 className="text-6xl font-bold text-center mb-4">¡Bienvenido!</h1>
           <p className="text-2xl text-gray-700 text-center">
-            Explorá y aplicá <strong>Gaussian Mixture Models (GMM)</strong> para
-            la <strong>Detección de Anomalías</strong>,{' '}
-            <strong>Clustering</strong> y más.
+            Explorá y analizá <strong>cambios en la cobertura de nieve</strong>{' '}
+            a lo largo del tiempo usando
+            <strong> imágenes satelitales</strong> y{' '}
+            <strong>datos climáticos</strong>.
           </p>
         </section>
 
-        {/* Sección sobre GMM */}
+        {/* About Snow Map Section */}
         <section className="mb-20">
-          <h2 className="text-3xl font-semibold mb-6 text-center ">
-            ¿Qué es Gaussian Mixture Models (GMM)?
+          <h2 className="text-3xl font-semibold mb-6 text-center">
+            ¿Qué es Snow Map?
           </h2>
           <p className="text-xl text-gray-800 mb-4 text-center">
-            <strong>{'Gaussian Mixture Models (GMM)'}</strong> es un modelo
-            probabilístico que representa una combinación de múltiples
-            distribuciones gaussianas para modelar conjuntos de datos complejos.
-            Cada componente gaussiano en el modelo representa una subpoblación
-            dentro de los datos, permitiendo una mayor flexibilidad en
-            comparación con modelos de distribución única.
+            <strong>Snow Map</strong> es una herramienta que permite analizar la
+            evolución de la cobertura de nieve en regiones montañosas utilizando
+            imágenes satelitales. Nuestra plataforma procesa datos de diversas
+            fuentes para proporcionar información detallada sobre cambios en la
+            nieve a lo largo del tiempo.
           </p>
         </section>
 
-        {/* Sección de Funcionalidades de la Plataforma */}
+        {/* Platform Features Section */}
         <section className="mb-20">
           <h2 className="text-3xl font-semibold mb-6 text-center">
             ¿Qué Podés Hacer en Esta Plataforma?
           </h2>
           <ul className="list-inside text-base text-gray-800 text-center list-none flex gap-3">
             <li>
-              <div className="text-xl font-bold mb-2">Clustering</div>
+              <div className="text-xl font-bold mb-2">Seleccionar Áreas</div>
               <div className="text-lg">
-                Explorá diferentes algoritmos de clustering como GMM y KMeans
-                para agrupar tus datos.
+                Dibujá polígonos en el mapa para definir áreas específicas de
+                interés para analizar.
+              </div>
+            </li>
+            <li>
+              <div className="text-xl font-bold mb-2">Analizar Tendencias</div>
+              <div className="text-lg">
+                Visualizá cómo cambia la cobertura de nieve a lo largo de
+                diferentes años y estaciones.
               </div>
             </li>
             <li>
               <div className="text-xl font-bold mb-2">
-                Detección de Anomalías
+                Ver Imágenes Satelitales
               </div>
               <div className="text-lg">
-                Utilizá técnicas avanzadas como Isolation Forest y GMM para
-                identificar datos atípicos.
+                Accedé a imágenes de satélite que muestran la cobertura de nieve
+                en diferentes fechas.
               </div>
             </li>
             <li>
-              <div className="text-xl font-bold mb-2">Modelado de Densidad</div>
+              <div className="text-xl font-bold mb-2">Exportar Datos</div>
               <div className="text-lg">
-                Analizá la densidad de tus datos para comprender mejor su
-                distribución.
-              </div>
-            </li>
-            <li>
-              <div className="text-xl font-bold mb-2">
-                Segmentación de Imágenes
-              </div>
-              <div className="text-lg">
-                Aplicá algoritmos de clustering para segmentar imágenes de
-                manera efectiva.
+                Descargá los datos para realizar análisis más detallados en tus
+                propias herramientas.
               </div>
             </li>
           </ul>

@@ -30,11 +30,21 @@ interface SnowData {
   snow_area_m2: number;
   total_area_m2: number;
   image_id?: string;
-  image_url?: string;
+  rgb_url?: string;
+  snow_url?: string;
+  image_date: string;
+}
+
+interface PermanentSnowData {
+  area_m2: number;
+  min_height_m: number;
+  total_area_m2: number;
+  timestamp: string;
 }
 
 interface ApiResponse {
   results: SnowData[];
+  permanent_snow: PermanentSnowData;
 }
 
 // Component to handle map actions
@@ -66,9 +76,14 @@ const SnowMapPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [drawingEnabled, setDrawingEnabled] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [abortController, setAbortController] =
+    useState<AbortController | null>(null);
 
   // States for satellite imagery
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageType, setSelectedImageType] = useState<
+    'rgb' | 'snow' | null
+  >(null);
   const [imageLoading, setImageLoading] = useState<boolean>(false);
 
   // Ref for the map
@@ -76,6 +91,11 @@ const SnowMapPage: React.FC = () => {
 
   // Ref for the chart
   const chartRef = useRef<HTMLDivElement>(null);
+
+  // States for permanent snow data
+  const [permanentSnowData, setPermanentSnowData] = useState<
+    PermanentSnowData[]
+  >([]);
 
   // Fix for the default marker icons
   useEffect(() => {
@@ -106,7 +126,10 @@ const SnowMapPage: React.FC = () => {
   };
 
   // Handle selecting a satellite image
-  const handleSelectImage = (imageUrl: string | undefined) => {
+  const handleSelectImage = (
+    imageUrl: string | undefined,
+    type: 'rgb' | 'snow'
+  ) => {
     if (!imageUrl) {
       alert('No hay imagen disponible para esta fecha');
       return;
@@ -114,6 +137,7 @@ const SnowMapPage: React.FC = () => {
 
     setImageLoading(true);
     setSelectedImage(imageUrl);
+    setSelectedImageType(type);
   };
 
   // Handle image loaded
@@ -128,9 +152,16 @@ const SnowMapPage: React.FC = () => {
       return;
     }
 
+    // Clear previous results and selected image
+    setSelectedData(null);
+    setSelectedImage(null);
+    setSelectedImageType(null);
+
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    setAbortController(controller);
     setLoading(true);
     setError(null);
-    setSelectedImage(null);
 
     try {
       // Format data for the backend
@@ -151,45 +182,40 @@ const SnowMapPage: React.FC = () => {
           headers: {
             'Content-Type': 'application/json',
           },
+          signal: controller.signal,
         }
       );
       setSelectedData(response.data.results);
-    } catch (err) {
-      console.error('Error fetching snow data:', err);
-      setError('Failed to fetch snow data. Please try again.');
-      // For development/testing, use mock data if backend call fails
-      setSelectedData([
-        {
-          date: '2018-01-15',
-          snow_area_m2: 12000,
-          total_area_m2: 50000,
-          image_url:
-            'https://via.placeholder.com/500x500.png?text=Mock+winter+2018-01-15',
-        },
-        {
-          date: '2018-04-15',
-          snow_area_m2: 14500,
-          total_area_m2: 50000,
-          image_url:
-            'https://via.placeholder.com/500x500.png?text=Mock+summer+2018-04-15',
-        },
-        {
-          date: '2019-01-15',
-          snow_area_m2: 11000,
-          total_area_m2: 50000,
-          image_url:
-            'https://via.placeholder.com/500x500.png?text=Mock+winter+2019-01-15',
-        },
-        {
-          date: '2019-04-15',
-          snow_area_m2: 13500,
-          total_area_m2: 50000,
-          image_url:
-            'https://via.placeholder.com/500x500.png?text=Mock+summer+2019-04-15',
-        },
-      ]);
+
+      // Add new permanent snow data to the list
+      const newPermanentSnowData = {
+        ...response.data.permanent_snow,
+        timestamp: new Date().toISOString(),
+      };
+      setPermanentSnowData((prev) => [...prev, newPermanentSnowData]);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Request cancelled');
+        setError('Request cancelled by user');
+        setSelectedData(null);
+      } else {
+        console.error('Error fetching snow data:', err);
+        const errorMessage =
+          err.response?.data?.error ||
+          'Error al obtener los datos de nieve. Por favor, intente nuevamente.';
+        setError(errorMessage);
+        setSelectedData(null);
+      }
     } finally {
       setLoading(false);
+      setAbortController(null);
+    }
+  };
+
+  // Handle request cancellation
+  const handleCancel = () => {
+    if (abortController) {
+      abortController.abort();
     }
   };
 
@@ -204,12 +230,19 @@ const SnowMapPage: React.FC = () => {
 
   // Format date for display
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('es-AR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(date);
+    try {
+      // Ensure the date string is in YYYY-MM-DD format
+      const [year, month, day] = dateString.split('-');
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      return new Intl.DateTimeFormat('es-AR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return dateString; // Return original string if formatting fails
+    }
   };
 
   // Convert m² to km²
@@ -225,7 +258,7 @@ const SnowMapPage: React.FC = () => {
 
       // Format data for the chart
       const chartData = selectedData.map((item) => ({
-        date: new Date(item.date),
+        date: new Date(item.image_date),
         snowArea: sqmToSqkm(item.snow_area_m2),
         totalArea: sqmToSqkm(item.total_area_m2),
       }));
@@ -269,7 +302,14 @@ const SnowMapPage: React.FC = () => {
         .y((d) => yScale(d.snowArea));
 
       // Create axes
-      const xAxis = d3.axisBottom(xScale);
+      const xAxis = d3
+        .axisBottom(xScale)
+        .ticks(Math.min(chartData.length, 12))
+        .tickFormat((d) => {
+          const date = d as Date;
+          return `${date.getMonth() + 1}/${date.getFullYear()}`;
+        });
+
       const yAxis = d3.axisLeft(yScale);
 
       // Add X axis
@@ -369,7 +409,7 @@ const SnowMapPage: React.FC = () => {
   // Group results by year for display
   const groupedByYear = selectedData
     ? selectedData.reduce<Record<string, SnowData[]>>((acc, item) => {
-        const year = item.date.split('-')[0];
+        const year = item.image_date.split('-')[0];
         if (!acc[year]) acc[year] = [];
         acc[year].push(item);
         return acc;
@@ -396,7 +436,7 @@ const SnowMapPage: React.FC = () => {
             className={`h-[500px] border border-gray-300 rounded-lg overflow-hidden relative ${selectedImage ? 'satellite-image-active' : ''}`}
           >
             <MapContainer
-              center={[-34.6037, -58.3816]} // Buenos Aires
+              center={[-41.27, -71.32]}
               zoom={10}
               style={{ height: '100%', width: '100%' }}
               ref={mapRef}
@@ -432,7 +472,7 @@ const SnowMapPage: React.FC = () => {
                         [90, 180],
                       ]
                     }
-                    opacity={0.7}
+                    opacity={selectedImageType === 'snow' ? 0.8 : 0.7}
                     zIndex={500}
                     eventHandlers={{
                       load: handleImageLoaded,
@@ -486,7 +526,7 @@ const SnowMapPage: React.FC = () => {
             </div>
           )}
           <div className="mt-2 flex gap-2">
-            {drawnPolygon && (
+            {drawnPolygon && !loading && (
               <button
                 className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md text-sm"
                 onClick={handleReset}
@@ -589,10 +629,10 @@ const SnowMapPage: React.FC = () => {
 
           <button
             className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md disabled:bg-gray-400"
-            onClick={handleSubmit}
-            disabled={!drawnPolygon || loading}
+            onClick={loading ? handleCancel : handleSubmit}
+            disabled={!drawnPolygon}
           >
-            {loading ? 'Cargando...' : 'Analizar'}
+            {loading ? 'Cancelar' : 'Analizar'}
           </button>
 
           {error && (
@@ -634,7 +674,7 @@ const SnowMapPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {Object.entries(groupedByYear).flatMap(([year, dataItems]) =>
                   dataItems.map((item, index) => (
-                    <tr key={`${year}-${item.date}`}>
+                    <tr key={`${year}-${item.image_date}`}>
                       {index === 0 ? (
                         <td
                           className="px-6 py-4 whitespace-nowrap font-medium text-gray-900"
@@ -644,7 +684,7 @@ const SnowMapPage: React.FC = () => {
                         </td>
                       ) : null}
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                        {formatDate(item.date)}
+                        {formatDate(item.image_date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500">
                         {sqmToSqkm(item.snow_area_m2).toFixed(3)} km²
@@ -660,27 +700,57 @@ const SnowMapPage: React.FC = () => {
                         %
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                        {item.image_url ? (
-                          <button
-                            className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 satellite-image-button"
-                            onClick={() => handleSelectImage(item.image_url)}
-                            title="Ver imagen satelital"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-5 w-5"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                              />
-                            </svg>
-                          </button>
+                        {item.rgb_url || item.snow_url ? (
+                          <div className="flex gap-2">
+                            {item.rgb_url && (
+                              <button
+                                className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 satellite-image-button"
+                                onClick={() =>
+                                  handleSelectImage(item.rgb_url, 'rgb')
+                                }
+                                title="Ver imagen RGB"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                  />
+                                </svg>
+                              </button>
+                            )}
+                            {item.snow_url && (
+                              <button
+                                className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200 satellite-image-button"
+                                onClick={() =>
+                                  handleSelectImage(item.snow_url, 'snow')
+                                }
+                                title="Ver máscara de nieve"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                  />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-gray-400">No disponible</span>
                         )}
@@ -704,6 +774,134 @@ const SnowMapPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Permanent Snow Chart - Always visible */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
+        <h3 className="text-lg font-semibold mb-3">
+          Relación entre Altura Mínima y Área de Nieve Permanente
+        </h3>
+        <div
+          ref={(el) => {
+            if (el) {
+              // Clear previous chart if any
+              d3.select(el).selectAll('*').remove();
+
+              // Set dimensions and margins
+              const margin = { top: 20, right: 30, bottom: 50, left: 60 };
+              const width = el.clientWidth - margin.left - margin.right;
+              const height = 300 - margin.top - margin.bottom;
+
+              // Create SVG
+              const svg = d3
+                .select(el)
+                .append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+              if (permanentSnowData.length > 0) {
+                // Format data for the chart
+                const chartData = permanentSnowData.map((item) => ({
+                  area: sqmToSqkm(item.area_m2),
+                  minHeight: item.min_height_m,
+                  totalArea: sqmToSqkm(item.total_area_m2),
+                }));
+
+                // Sort data by minimum height
+                chartData.sort((a, b) => a.minHeight - b.minHeight);
+
+                // Create scales
+                const xScale = d3
+                  .scaleLinear()
+                  .domain([
+                    0,
+                    (d3.max(chartData, (d) => d.minHeight) as number) * 1.1,
+                  ])
+                  .range([0, width]);
+
+                const yScale = d3
+                  .scaleLinear()
+                  .domain([
+                    0,
+                    (d3.max(chartData, (d) => d.totalArea) as number) * 1.1,
+                  ])
+                  .range([height, 0]);
+
+                // Create line
+                const line = d3
+                  .line<{ minHeight: number; totalArea: number }>()
+                  .x((d) => xScale(d.minHeight))
+                  .y((d) => yScale(d.totalArea))
+                  .curve(d3.curveMonotoneX);
+
+                // Create axes
+                const xAxis = d3.axisBottom(xScale);
+                const yAxis = d3.axisLeft(yScale);
+
+                // Add X axis
+                svg
+                  .append('g')
+                  .attr('transform', `translate(0,${height})`)
+                  .call(xAxis);
+
+                // Add Y axis
+                svg.append('g').call(yAxis);
+
+                // Add line path
+                svg
+                  .append('path')
+                  .datum(chartData)
+                  .attr('fill', 'none')
+                  .attr('stroke', 'steelblue')
+                  .attr('stroke-width', 2)
+                  .attr('d', line);
+
+                // Add dots for data points
+                svg
+                  .selectAll('circle')
+                  .data(chartData)
+                  .enter()
+                  .append('circle')
+                  .attr('cx', (d) => xScale(d.minHeight))
+                  .attr('cy', (d) => yScale(d.totalArea))
+                  .attr('r', 5)
+                  .attr('fill', 'steelblue');
+
+                // Add axis labels
+                svg
+                  .append('text')
+                  .attr(
+                    'transform',
+                    `translate(${width / 2}, ${height + margin.bottom - 5})`
+                  )
+                  .style('text-anchor', 'middle')
+                  .text('Altura Mínima (m)');
+
+                svg
+                  .append('text')
+                  .attr('transform', 'rotate(-90)')
+                  .attr('y', -margin.left + 15)
+                  .attr('x', -(height / 2))
+                  .attr('dy', '1em')
+                  .style('text-anchor', 'middle')
+                  .text('Área Total de Nieve Permanente (km²)');
+              } else {
+                // Add message when no data is available
+                svg
+                  .append('text')
+                  .attr('x', width / 2)
+                  .attr('y', height / 2)
+                  .attr('text-anchor', 'middle')
+                  .text(
+                    'Dibuja un polígono y analiza para ver los datos de nieve permanente'
+                  );
+              }
+            }
+          }}
+          className="w-full h-[300px] border border-gray-200 rounded-lg p-2"
+        ></div>
+      </div>
     </div>
   );
 };

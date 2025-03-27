@@ -89,13 +89,13 @@ const SnowMapPage: React.FC = () => {
   // Ref for the map
   const mapRef = useRef<L.Map | null>(null);
 
-  // Ref for the chart
-  const chartRef = useRef<HTMLDivElement>(null);
-
   // States for permanent snow data
   const [permanentSnowData, setPermanentSnowData] = useState<
     PermanentSnowData[]
   >([]);
+
+  // Refs for charts
+  const snowChartRef = useRef<HTMLDivElement | null>(null);
 
   // Fix for the default marker icons
   useEffect(() => {
@@ -171,7 +171,9 @@ const SnowMapPage: React.FC = () => {
           coordinates: [drawnPolygon.latlngs],
         },
         start_date: `${startYear}-${String(startMonth).padStart(2, '0')}-01`,
-        end_date: `${endYear}-${String(endMonth).padStart(2, '0')}-${endMonth === 2 ? '28' : '30'}`,
+        end_date: `${endYear}-${String(endMonth).padStart(2, '0')}-${
+          endMonth === 2 ? '28' : '30'
+        }`,
       };
 
       // Call backend API with full URL since we're not using proxy
@@ -228,7 +230,7 @@ const SnowMapPage: React.FC = () => {
     setSelectedImage(null);
   };
 
-  // Format date for display
+  // Format date for display in table
   const formatDate = (dateString: string) => {
     try {
       // Ensure the date string is in YYYY-MM-DD format
@@ -250,146 +252,6 @@ const SnowMapPage: React.FC = () => {
     return valueInSqm / 1000000;
   };
 
-  // Draw the chart using D3
-  useEffect(() => {
-    if (selectedData && selectedData.length > 0 && chartRef.current) {
-      // Clear previous chart if any
-      d3.select(chartRef.current).selectAll('*').remove();
-
-      // Format data for the chart
-      const chartData = selectedData.map((item) => ({
-        date: new Date(item.image_date),
-        snowArea: sqmToSqkm(item.snow_area_m2),
-        totalArea: sqmToSqkm(item.total_area_m2),
-      }));
-
-      // Sort data by date
-      chartData.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-      // Get the maximum total area for y-axis scale
-      const maxTotalArea = d3.max(chartData, (d) => d.totalArea) as number;
-
-      // Set dimensions and margins
-      const margin = { top: 20, right: 30, bottom: 50, left: 60 };
-      const width = chartRef.current.clientWidth - margin.left - margin.right;
-      const height = 300 - margin.top - margin.bottom;
-
-      // Create SVG
-      const svg = d3
-        .select(chartRef.current)
-        .append('svg')
-        .attr('width', width + margin.left + margin.right)
-        .attr('height', height + margin.top + margin.bottom)
-        .append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-
-      // Create scales
-      const xScale = d3
-        .scaleTime()
-        .domain(d3.extent(chartData, (d) => d.date) as [Date, Date])
-        .range([0, width]);
-
-      // Set y-axis scale from 0 to max total area
-      const yScale = d3
-        .scaleLinear()
-        .domain([0, maxTotalArea * 1.1]) // Add 10% padding at the top
-        .range([height, 0]);
-
-      // Create line for snow area
-      const line = d3
-        .line<{ date: Date; snowArea: number }>()
-        .x((d) => xScale(d.date))
-        .y((d) => yScale(d.snowArea));
-
-      // Create axes
-      const xAxis = d3
-        .axisBottom(xScale)
-        .ticks(Math.min(chartData.length, 12))
-        .tickFormat((d) => {
-          const date = d as Date;
-          return `${date.getMonth() + 1}/${date.getFullYear()}`;
-        });
-
-      const yAxis = d3.axisLeft(yScale);
-
-      // Add X axis
-      svg
-        .append('g')
-        .attr('transform', `translate(0,${height})`)
-        .call(xAxis)
-        .selectAll('text')
-        .style('text-anchor', 'end')
-        .attr('dx', '-.8em')
-        .attr('dy', '.15em')
-        .attr('transform', 'rotate(-45)');
-
-      // Add Y axis
-      svg.append('g').call(yAxis);
-
-      // Add line path for snow area
-      svg
-        .append('path')
-        .datum(chartData)
-        .attr('fill', 'none')
-        .attr('stroke', 'steelblue')
-        .attr('stroke-width', 2)
-        .attr('d', line);
-
-      // Add dots for data points
-      svg
-        .selectAll('circle')
-        .data(chartData)
-        .enter()
-        .append('circle')
-        .attr('cx', (d) => xScale(d.date))
-        .attr('cy', (d) => yScale(d.snowArea))
-        .attr('r', 5)
-        .attr('fill', 'steelblue');
-
-      // Add total area reference line if all total areas are equal
-      if (chartData.every((d) => d.totalArea === chartData[0].totalArea)) {
-        // Add horizontal line for total area
-        svg
-          .append('line')
-          .attr('x1', 0)
-          .attr('x2', width)
-          .attr('y1', yScale(chartData[0].totalArea))
-          .attr('y2', yScale(chartData[0].totalArea))
-          .attr('stroke', 'rgba(255, 100, 100, 0.5)')
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '5,5');
-
-        // Add label for total area line
-        svg
-          .append('text')
-          .attr('x', width - 5)
-          .attr('y', yScale(chartData[0].totalArea) - 5)
-          .attr('text-anchor', 'end')
-          .attr('fill', 'rgba(255, 100, 100, 0.8)')
-          .text(`Área Total: ${chartData[0].totalArea.toFixed(2)} km²`);
-      }
-
-      // Add axis labels
-      svg
-        .append('text')
-        .attr(
-          'transform',
-          `translate(${width / 2}, ${height + margin.bottom - 5})`
-        )
-        .style('text-anchor', 'middle')
-        .text('Fecha');
-
-      svg
-        .append('text')
-        .attr('transform', 'rotate(-90)')
-        .attr('y', -margin.left + 15)
-        .attr('x', -(height / 2))
-        .attr('dy', '1em')
-        .style('text-anchor', 'middle')
-        .text('Área (km²)');
-    }
-  }, [selectedData]);
-
   const years = Array.from({ length: 6 }, (_, i) => 2018 + i);
   const months = [
     { value: 1, label: 'Enero' },
@@ -406,7 +268,7 @@ const SnowMapPage: React.FC = () => {
     { value: 12, label: 'Diciembre' },
   ];
 
-  // Group results by year for display
+  // Group results by year for display in the table
   const groupedByYear = selectedData
     ? selectedData.reduce<Record<string, SnowData[]>>((acc, item) => {
         const year = item.image_date.split('-')[0];
@@ -422,6 +284,136 @@ const SnowMapPage: React.FC = () => {
     return drawnPolygon.bounds;
   };
 
+  // D3 Chart for Snow Area vs Date (only month and year on X-axis)
+  useEffect(() => {
+    if (!snowChartRef.current) return;
+
+    // Limpiar el div antes de dibujar
+    d3.select(snowChartRef.current).selectAll('*').remove();
+
+    // Si no hay datos, no graficar nada
+    if (!selectedData || selectedData.length === 0) return;
+
+    // Asegurarse de que la cadena sea 'YYYY-MM-DD'.
+    // Ajustar el formato en .timeParse según corresponda a tus datos.
+    const parseDate = d3.timeParse('%Y-%m-%d');
+
+    // Convertimos cada registro a { date, snowAreaKm2 }
+    // Ojo con fallback: si parseDate no lo reconoce, en lugar de new Date(), usa algo que te alerte
+    const chartData = selectedData.map((d) => {
+      const parsed = parseDate(d.image_date);
+      if (!parsed) {
+        console.warn('No se pudo parsear la fecha:', d.image_date);
+        // Puedes evitar hacer fallback a 'new Date()' para no arruinar el dominio.
+        // Retorna null y luego filtra más abajo, o maneja como gustes.
+      }
+      return {
+        date: parsed, // null si falló
+        snowAreaKm2: sqmToSqkm(d.snow_area_m2),
+      };
+    });
+
+    // Filtrar posibles nulos si hay fechas mal parseadas
+    const filteredData = chartData.filter((d) => d.date !== null) as {
+      date: Date;
+      snowAreaKm2: number;
+    }[];
+
+    // Ordenar datos por fecha ascendente
+    filteredData.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Dimensiones
+    const margin = { top: 20, right: 30, bottom: 50, left: 60 };
+    const width = snowChartRef.current.clientWidth - margin.left - margin.right;
+    const height = 300 - margin.top - margin.bottom;
+
+    // Crear SVG
+    const svg = d3
+      .select(snowChartRef.current)
+      .append('svg')
+      .attr('width', width + margin.left + margin.right)
+      .attr('height', height + margin.top + margin.bottom)
+      .append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Escalas
+    const xDomain = d3.extent(filteredData, (d) => d.date) as [Date, Date];
+    const yMax = d3.max(filteredData, (d) => d.snowAreaKm2) ?? 0;
+
+    const xScale = d3.scaleTime().domain(xDomain).range([0, width]);
+    const yScale = d3.scaleLinear().domain([0, yMax]).nice().range([height, 0]);
+
+    // Para mostrar **solo** los meses con datos, recopilamos las fechas únicas:
+    const uniqueDates = Array.from(
+      new Set(filteredData.map((d) => +d.date)) // +d.date => timestamp
+    ).map((ts) => new Date(ts));
+
+    // Eje X con .tickValues
+    const xAxis = d3
+      .axisBottom<Date>(xScale)
+      .tickValues(uniqueDates) // <-- solo dibuja ticks en esas fechas
+      .tickFormat(d3.timeFormat('%b %Y')); // Ej: "Jan 2019"
+
+    // Eje Y estándar
+    const yAxis = d3.axisLeft(yScale);
+
+    // Dibujar ejes
+    svg
+      .append('g')
+      .attr('transform', `translate(0, ${height})`)
+      .call(xAxis)
+      .selectAll('text')
+      .style('text-anchor', 'end')
+      .attr('dx', '-0.5em')
+      .attr('dy', '0.15em')
+      .attr('transform', 'rotate(-30)');
+
+    svg.append('g').call(yAxis);
+
+    // Generador de línea
+    const line = d3
+      .line<{ date: Date; snowAreaKm2: number }>()
+      .x((d) => xScale(d.date))
+      .y((d) => yScale(d.snowAreaKm2))
+      .curve(d3.curveMonotoneX);
+
+    // Dibujar la línea
+    svg
+      .append('path')
+      .datum(filteredData)
+      .attr('fill', 'none')
+      .attr('stroke', 'steelblue')
+      .attr('stroke-width', 2)
+      .attr('d', line);
+
+    // Dibujar los puntos
+    svg
+      .selectAll('circle')
+      .data(filteredData)
+      .enter()
+      .append('circle')
+      .attr('cx', (d) => xScale(d.date))
+      .attr('cy', (d) => yScale(d.snowAreaKm2))
+      .attr('r', 4)
+      .attr('fill', 'steelblue');
+
+    // Etiquetas de ejes
+    svg
+      .append('text')
+      .attr('transform', `translate(${width / 2}, ${height + 40})`)
+      .style('text-anchor', 'middle')
+      .text('Fecha (Mes/Año)');
+
+    svg
+      .append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('y', -margin.left + 15)
+      .attr('x', -(height / 2))
+      .attr('dy', '1em')
+      .style('text-anchor', 'middle')
+      .text('Área total nevada (km²)');
+  }, [selectedData]);
+
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Análisis de Nieve por Área</h1>
@@ -433,7 +425,9 @@ const SnowMapPage: React.FC = () => {
       <div className="flex flex-col md:flex-row gap-4 mb-4">
         <div className="w-full md:w-2/3">
           <div
-            className={`h-[500px] border border-gray-300 rounded-lg overflow-hidden relative ${selectedImage ? 'satellite-image-active' : ''}`}
+            className={`h-[500px] border border-gray-300 rounded-lg overflow-hidden relative ${
+              selectedImage ? 'satellite-image-active' : ''
+            }`}
           >
             <MapContainer
               center={[-41.27, -71.32]}
@@ -643,6 +637,7 @@ const SnowMapPage: React.FC = () => {
         </div>
       </div>
 
+      {/* TABLE OF RESULTS */}
       {selectedData && selectedData.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
           <h2 className="text-xl font-semibold mb-3">Resultados</h2>
@@ -761,17 +756,19 @@ const SnowMapPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
 
-          {/* Snow Coverage Chart */}
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold mb-3">
-              Evolución de la Cobertura de Nieve a lo Largo del Tiempo
-            </h3>
-            <div
-              ref={chartRef}
-              className="w-full h-[300px] border border-gray-200 rounded-lg p-2"
-            ></div>
-          </div>
+      {/* NEW CHART FOR TOTAL SNOW AREA VS DATE */}
+      {selectedData && selectedData.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
+          <h3 className="text-lg font-semibold mb-3">
+            Evolución del Área Nevada (km²) en el Tiempo
+          </h3>
+          <div
+            ref={snowChartRef}
+            className="w-full h-[300px] border border-gray-200 rounded-lg p-2"
+          ></div>
         </div>
       )}
 

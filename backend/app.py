@@ -219,7 +219,7 @@ def get_snow_data():
                 min_snow_height = min(min_snow_height, min_height)
 
             # Obtener fecha real de esa "imagen ganadora"
-            image_date = best_img.date().format('YYYY-MM-DD').getInfo()
+            image_date = best_img.date().format('YYYY-MM-dd').getInfo()
             image_id = best_img.id().getInfo()
 
             # Generar URLs de miniatura

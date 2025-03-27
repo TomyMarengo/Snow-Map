@@ -148,7 +148,7 @@ const PermanentSnowChart: React.FC<PermanentSnowChartProps> = ({
         .attr('y', height / 2)
         .attr('text-anchor', 'middle')
         .text(
-          'Dibuja un polígono y analiza para ver los datos de nieve permanente'
+          'Dibuja un polígono y analiza para ver los datos de nieve permanente y vegetación'
         );
     }
   }, [permanentSnowData]);
@@ -159,7 +159,7 @@ const PermanentSnowChart: React.FC<PermanentSnowChartProps> = ({
       className="bg-white border border-gray-200 rounded-lg p-4 mt-4"
     >
       <h3 className="text-lg font-semibold mb-3">
-        Relación entre Altura Mínima y Área de Nieve Permanente
+        Análisis de Nieve Permanente por Elevación
       </h3>
       <div
         ref={chartRef}

@@ -12,7 +12,7 @@ const App: React.FC = () => {
     { key: 'home', label: 'Inicio', path: '/' },
     {
       key: 'snow-map',
-      label: 'Mapa de Nieve',
+      label: 'Análisis de mapa',
       path: '/snow-map',
     },
   ];

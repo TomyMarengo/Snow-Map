@@ -10,8 +10,9 @@ const HomePage: React.FC = () => {
         <section className="mb-36">
           <h1 className="text-6xl font-bold text-center mb-4">¡Bienvenido!</h1>
           <p className="text-2xl text-gray-700 text-center">
-            Explorá y analizá <strong>cambios en la cobertura de nieve</strong>{' '}
-            a lo largo del tiempo usando
+            Explorá y analizá{' '}
+            <strong>cambios en la cobertura de nieve y vegetación</strong> a lo
+            largo del tiempo usando
             <strong> imágenes satelitales</strong> y{' '}
             <strong>datos climáticos</strong>.
           </p>
@@ -20,14 +21,15 @@ const HomePage: React.FC = () => {
         {/* About Snow Map Section */}
         <section className="mb-20">
           <h2 className="text-3xl font-semibold mb-6 text-center">
-            ¿Qué es Snow Map?
+            ¿Qué es Geo Analyzer?
           </h2>
           <p className="text-xl text-gray-800 mb-4 text-center">
-            <strong>Snow Map</strong> es una herramienta que permite analizar la
-            evolución de la cobertura de nieve en regiones montañosas utilizando
-            imágenes satelitales. Nuestra plataforma procesa datos de diversas
-            fuentes para proporcionar información detallada sobre cambios en la
-            nieve a lo largo del tiempo.
+            <strong>Geo Analyzer</strong> es una herramienta que permite
+            analizar la evolución de la cobertura de nieve y vegetación en
+            diversas regiones utilizando imágenes satelitales. Nuestra
+            plataforma procesa datos de diversas fuentes para proporcionar
+            información detallada sobre cambios ambientales a lo largo del
+            tiempo.
           </p>
         </section>
 
@@ -47,8 +49,8 @@ const HomePage: React.FC = () => {
             <li>
               <div className="text-xl font-bold mb-2">Analizar Tendencias</div>
               <div className="text-lg">
-                Visualizá cómo cambia la cobertura de nieve a lo largo de
-                diferentes años y estaciones.
+                Visualizá cómo cambian la cobertura de nieve y los índices de
+                vegetación a lo largo de diferentes años y estaciones.
               </div>
             </li>
             <li>
@@ -56,8 +58,8 @@ const HomePage: React.FC = () => {
                 Ver Imágenes Satelitales
               </div>
               <div className="text-lg">
-                Accedé a imágenes de satélite que muestran la cobertura de nieve
-                en diferentes fechas.
+                Accedé a imágenes de satélite que muestran la nieve y vegetación
+                (NDVI) en diferentes fechas.
               </div>
             </li>
             <li>

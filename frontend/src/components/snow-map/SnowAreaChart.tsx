@@ -25,12 +25,14 @@ const SnowAreaChart: React.FC<SnowAreaChartProps> = ({ selectedData }) => {
       return {
         date: parsed,
         snowAreaKm2: sqmToSqkm(d.snow_area_m2),
+        vegAreaKm2: sqmToSqkm(d.veg_area_m2),
       };
     });
 
     const filteredData = chartData.filter((d) => d.date !== null) as {
       date: Date;
       snowAreaKm2: number;
+      vegAreaKm2: number;
     }[];
 
     filteredData.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -48,7 +50,10 @@ const SnowAreaChart: React.FC<SnowAreaChartProps> = ({ selectedData }) => {
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
     const xDomain = d3.extent(filteredData, (d) => d.date) as [Date, Date];
-    const yMax = d3.max(filteredData, (d) => d.snowAreaKm2) ?? 0;
+    const yMax = Math.max(
+      d3.max(filteredData, (d) => d.snowAreaKm2) ?? 0,
+      d3.max(filteredData, (d) => d.vegAreaKm2) ?? 0
+    );
 
     const xScale = d3.scaleTime().domain(xDomain).range([0, width]);
     const yScale = d3.scaleLinear().domain([0, yMax]).nice().range([height, 0]);
@@ -76,29 +81,61 @@ const SnowAreaChart: React.FC<SnowAreaChartProps> = ({ selectedData }) => {
 
     svg.append('g').call(yAxis);
 
-    const line = d3
+    // Line generator for snow area
+    const snowLine = d3
       .line<{ date: Date; snowAreaKm2: number }>()
       .x((d) => xScale(d.date))
       .y((d) => yScale(d.snowAreaKm2))
       .curve(d3.curveMonotoneX);
 
+    // Line generator for vegetation area
+    const vegLine = d3
+      .line<{ date: Date; vegAreaKm2: number }>()
+      .x((d) => xScale(d.date))
+      .y((d) => yScale(d.vegAreaKm2))
+      .curve(d3.curveMonotoneX);
+
+    // Add snow area line
     svg
       .append('path')
       .datum(filteredData)
       .attr('fill', 'none')
       .attr('stroke', 'steelblue')
       .attr('stroke-width', 2)
-      .attr('d', line);
+      .attr('d', snowLine);
 
+    // Add vegetation area line
     svg
-      .selectAll('circle')
+      .append('path')
+      .datum(filteredData)
+      .attr('fill', 'none')
+      .attr('stroke', 'forestgreen')
+      .attr('stroke-width', 2)
+      .attr('d', vegLine);
+
+    // Add snow points
+    svg
+      .selectAll('.snow-dot')
       .data(filteredData)
       .enter()
       .append('circle')
+      .attr('class', 'snow-dot')
       .attr('cx', (d) => xScale(d.date))
       .attr('cy', (d) => yScale(d.snowAreaKm2))
       .attr('r', 4)
       .attr('fill', 'steelblue');
+
+    // Add vegetation points
+    svg
+      .selectAll('.veg-dot')
+      .data(filteredData)
+      .enter()
+      .append('circle')
+      .attr('class', 'veg-dot')
+      .attr('cx', (d) => xScale(d.date))
+      .attr('cy', (d) => yScale(d.vegAreaKm2))
+      .attr('r', 4)
+      .attr('fill', 'forestgreen');
 
     // Axis labels
     svg
@@ -114,7 +151,44 @@ const SnowAreaChart: React.FC<SnowAreaChartProps> = ({ selectedData }) => {
       .attr('x', -(height / 2))
       .attr('dy', '1em')
       .style('text-anchor', 'middle')
-      .text('Área total nevada (km²)');
+      .text('Área (km²)');
+
+    // Legend
+    const legend = svg
+      .append('g')
+      .attr('transform', `translate(${width - 20}, 10)`);
+
+    // Snow area legend
+    legend
+      .append('circle')
+      .attr('cx', 0)
+      .attr('cy', 0)
+      .attr('r', 4)
+      .style('fill', 'steelblue');
+
+    legend
+      .append('text')
+      .attr('x', -10)
+      .attr('y', 0)
+      .attr('dy', '0.35em')
+      .style('text-anchor', 'end')
+      .text('Nieve');
+
+    // Vegetation area legend
+    legend
+      .append('circle')
+      .attr('cx', 0)
+      .attr('cy', 20)
+      .attr('r', 4)
+      .style('fill', 'forestgreen');
+
+    legend
+      .append('text')
+      .attr('x', -10)
+      .attr('y', 20)
+      .attr('dy', '0.35em')
+      .style('text-anchor', 'end')
+      .text('Vegetación');
   }, [selectedData]);
 
   if (!selectedData || selectedData.length === 0) {
@@ -124,7 +198,7 @@ const SnowAreaChart: React.FC<SnowAreaChartProps> = ({ selectedData }) => {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
       <h3 className="text-lg font-semibold mb-3">
-        Evolución del Área Nevada (km²) en el Tiempo
+        Evolución de Nieve y Vegetación en el Tiempo
       </h3>
       <div
         ref={chartRef}

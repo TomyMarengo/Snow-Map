@@ -3,9 +3,12 @@ export interface SnowData {
   date: string;
   snow_area_m2: number;
   total_area_m2: number;
+  veg_area_m2: number;
+  mean_ndvi: number;
   image_id?: string;
   rgb_url?: string;
   snow_url?: string;
+  ndvi_url?: string;
   image_date: string;
 }
 

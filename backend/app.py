@@ -127,6 +127,53 @@ def reverse_geocode(lat, lon):
         return "Unknown region"
 
 
+def calculate_ndvi(image, roi):
+    """
+    Calculates vegetation metrics using NDVI (Normalized Difference Vegetation Index).
+    Returns vegetation area (in m²) and average NDVI value within the given geometry.
+    """
+    ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI')
+    vegetation = ndvi.gt(0.3)  # Typical threshold for vegetation
+
+    # Get vegetation pixel count
+    veg_pixel_count = vegetation.reduceRegion(
+        reducer=ee.Reducer.sum(),
+        geometry=roi,
+        scale=10,
+        bestEffort=False,
+        maxPixels=1e13
+    ).get('NDVI')
+
+    # Get average NDVI
+    avg_ndvi = ndvi.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=roi,
+        scale=10,
+        bestEffort=False,
+        maxPixels=1e13
+    ).get('NDVI')
+
+    total_pixel_count = image.select(['B8']).reduceRegion(
+        reducer=ee.Reducer.count(),
+        geometry=roi,
+        scale=10,
+        bestEffort=False,
+        maxPixels=1e13
+    ).get('B8')
+
+    if veg_pixel_count and total_pixel_count and avg_ndvi:
+        # Each pixel is 10m x 10m = 100m²
+        veg_area = veg_pixel_count.getInfo() * 100
+        total_area = total_pixel_count.getInfo() * 100
+        mean_ndvi = avg_ndvi.getInfo()
+    else:
+        veg_area = 0.0
+        total_area = 0.0
+        mean_ndvi = 0.0
+
+    return veg_area, total_area, mean_ndvi
+
+
 @app.route('/snow-data', methods=['POST'])
 def get_snow_data():
     """
@@ -219,6 +266,9 @@ def get_snow_data():
             # Calculate snow area
             snow_area, total_area = calculate_snow_area(best_img, roi)
 
+            # Calculate vegetation metrics
+            veg_area, veg_total_area, mean_ndvi = calculate_ndvi(best_img, roi)
+
             # Track maximum snow area
             max_snow_area = max(max_snow_area, snow_area)
 
@@ -259,10 +309,24 @@ def get_snow_data():
                     'format': 'png',
                     'bands': 'snow,alpha,alpha'
                 })
+
+                # Generate NDVI visualization
+                ndvi = best_img.normalizedDifference(['B8', 'B4']).rename('NDVI')
+                clipped_ndvi = ndvi.clip(roi)
+                ndvi_url = clipped_ndvi.getThumbURL({
+                    'region': roi_bounds,
+                    'dimensions': '500',
+                    'format': 'png',
+                    'min': -0.2,
+                    'max': 0.8,
+                    'palette': 'FFFFFF, FF0000, FFFF00, 00FF00'  # White, Red, Yellow, Green
+                })
+                
             except Exception as e:
                 print(f"Error generating thumbnails for {image_date}: {e}")
                 rgb_url = None
                 snow_url = None
+                ndvi_url = None
 
             results.append({
                 'month': month,
@@ -270,8 +334,11 @@ def get_snow_data():
                 'image_id': image_id,
                 'snow_area_m2': snow_area,
                 'total_area_m2': total_area,
+                'veg_area_m2': veg_area,
+                'mean_ndvi': mean_ndvi,
                 'rgb_url': rgb_url,
-                'snow_url': snow_url
+                'snow_url': snow_url,
+                'ndvi_url': ndvi_url
             })
 
         if min_snow_height == float('inf'):

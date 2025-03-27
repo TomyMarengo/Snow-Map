@@ -78,7 +78,7 @@ const SnowMapPage: React.FC = () => {
   // States for satellite imagery
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageType, setSelectedImageType] = useState<
-    'rgb' | 'snow' | null
+    'rgb' | 'snow' | 'ndvi' | null
   >(null);
   const [imageLoading, setImageLoading] = useState<boolean>(false);
 
@@ -123,10 +123,12 @@ const SnowMapPage: React.FC = () => {
   // Image selection
   const handleSelectImage = (
     imageUrl: string | undefined,
-    type: 'rgb' | 'snow'
+    type: 'rgb' | 'snow' | 'ndvi'
   ) => {
     if (!imageUrl) {
       alert('No hay imagen disponible para esta fecha');
+      // Re-enable drawing if there's no image available
+      setDrawingEnabled(true);
       return;
     }
 
@@ -223,6 +225,7 @@ const SnowMapPage: React.FC = () => {
         console.log('Request cancelled');
         setError('Request cancelled by user');
         setSelectedData(null);
+        setDrawingEnabled(true);
       } else {
         console.error('Error fetching snow data:', err);
         const errorMessage =
@@ -230,6 +233,7 @@ const SnowMapPage: React.FC = () => {
           'Error al obtener los datos de nieve. Por favor, intente nuevamente.';
         setError(errorMessage);
         setSelectedData(null);
+        setDrawingEnabled(true);
       }
     } finally {
       setLoading(false);
@@ -243,6 +247,9 @@ const SnowMapPage: React.FC = () => {
     if (abortController) {
       abortController.abort();
     }
+    // Clear the drawn polygon and re-enable drawing mode when canceling
+    setDrawnPolygon(null);
+    setDrawingEnabled(true);
   };
 
   // Handle selecting a past result from the carousel
@@ -263,10 +270,12 @@ const SnowMapPage: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Análisis de Nieve por Área</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        Análisis de Nieve y Vegetación por Área
+      </h1>
       <p className="mb-4">
         Dibuja un polígono en el mapa y selecciona un rango de años para ver los
-        datos de nieve en esa área.
+        datos de nieve y vegetación en esa área.
       </p>
 
       <div className="flex flex-col md:flex-row gap-4 mb-4">
@@ -316,7 +325,7 @@ const SnowMapPage: React.FC = () => {
         />
       )}
 
-      {/* Permanent Snow Chart - Always visible */}
+      {/* Snow Analysis Chart - Always visible */}
       <PermanentSnowChart permanentSnowData={permanentSnowData} />
     </div>
   );

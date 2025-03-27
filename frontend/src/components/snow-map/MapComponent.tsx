@@ -48,7 +48,7 @@ const MapController: React.FC<{
 interface MapComponentProps {
   drawnPolygon: any;
   selectedImage: string | null;
-  selectedImageType: 'rgb' | 'snow' | null;
+  selectedImageType: 'rgb' | 'snow' | 'ndvi' | null;
   imageLoading: boolean;
   drawingEnabled: boolean;
   handleCreated: (e: any) => void;

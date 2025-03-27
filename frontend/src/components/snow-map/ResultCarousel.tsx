@@ -9,7 +9,7 @@ interface ResultCarouselProps {
   onSelectResult: (result: ResultData) => void;
   handleSelectImage: (
     imageUrl: string | undefined,
-    type: 'rgb' | 'snow'
+    type: 'rgb' | 'snow' | 'ndvi'
   ) => void;
   currentResultId: string | null;
 }

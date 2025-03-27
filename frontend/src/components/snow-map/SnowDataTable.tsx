@@ -6,7 +6,7 @@ interface SnowDataTableProps {
   selectedData: SnowData[] | null;
   handleSelectImage: (
     imageUrl: string | undefined,
-    type: 'rgb' | 'snow'
+    type: 'rgb' | 'snow' | 'ndvi'
   ) => void;
 }
 
@@ -30,7 +30,9 @@ const SnowDataTable: React.FC<SnowDataTableProps> = ({
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
-      <h2 className="text-xl font-semibold mb-3">Resultados</h2>
+      <h2 className="text-xl font-semibold mb-3">
+        Datos de Nieve y Vegetación
+      </h2>
 
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
@@ -46,10 +48,13 @@ const SnowDataTable: React.FC<SnowDataTableProps> = ({
                 Nieve (km²)
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Área Total (km²)
+                Vegetación (km²)
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Porcentaje
+                NDVI Medio
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Área Total (km²)
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Imagen
@@ -75,20 +80,20 @@ const SnowDataTable: React.FC<SnowDataTableProps> = ({
                     {sqmToSqkm(item.snow_area_m2).toFixed(3)} km²
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                    {sqmToSqkm(item.veg_area_m2).toFixed(3)} km²
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                    {item.mean_ndvi.toFixed(3)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-gray-500">
                     {sqmToSqkm(item.total_area_m2).toFixed(3)} km²
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                    {((item.snow_area_m2 / item.total_area_m2) * 100).toFixed(
-                      2
-                    )}
-                    %
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                    {item.rgb_url || item.snow_url ? (
+                    {item.rgb_url || item.snow_url || item.ndvi_url ? (
                       <div className="flex gap-2">
                         {item.rgb_url && (
                           <button
-                            className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 satellite-image-button"
+                            className="p-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200 satellite-image-button"
                             onClick={() =>
                               handleSelectImage(item.rgb_url, 'rgb')
                             }
@@ -112,7 +117,7 @@ const SnowDataTable: React.FC<SnowDataTableProps> = ({
                         )}
                         {item.snow_url && (
                           <button
-                            className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200 satellite-image-button"
+                            className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 satellite-image-button"
                             onClick={() =>
                               handleSelectImage(item.snow_url, 'snow')
                             }
@@ -125,11 +130,43 @@ const SnowDataTable: React.FC<SnowDataTableProps> = ({
                               viewBox="0 0 24 24"
                               stroke="currentColor"
                             >
+                              {/* Snowflake icon */}
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 strokeWidth={2}
-                                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                d="M12 3v18M3 12h18M5.636 5.636l12.728 12.728M18.364 5.636L5.636 18.364M7.5 12h9M12 7.5v9"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                        {item.ndvi_url && (
+                          <button
+                            className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200 satellite-image-button"
+                            onClick={() =>
+                              handleSelectImage(item.ndvi_url, 'ndvi')
+                            }
+                            title="Ver índice de vegetación (NDVI)"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-5 w-5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              {/* Bush/plant icon */}
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 18v-6M8 12c0-2.5 2-4 4-2M16 12c0-2.5-2-4-4-2M6 12c0-4 3-5 6-3M18 12c0-4-3-5-6-3M12 12c0-2.5 1-3 3-2M12 12c0-2.5-1-3-3-2"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M10 20h4"
                               />
                             </svg>
                           </button>

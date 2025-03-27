@@ -4,6 +4,7 @@ from flask_cors import CORS
 import ssl
 import ee
 import geemap
+import requests  # For making HTTP calls to Nominatim
 from collections import defaultdict
 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -23,14 +24,12 @@ except Exception as e:
 
 def calculate_snow_area(image, roi):
     """
-    Calcula el área nevada (en m²) y el área total (en m²) para la geometría dada.
-    Utiliza NDSI (normalizado con B3 y B11) con un umbral de 0.4 para determinar si hay nieve.
+    Calculates snow area (in m²) and total area (in m²) within the given geometry.
+    Uses NDSI (normalized with B3 and B11) with a threshold of 0.4 to determine snow presence.
     """
-    # Índice de nieve
     ndsi = image.normalizedDifference(['B3', 'B11']).rename('NDSI')
-    snow = ndsi.gt(0.4)  # Umbral típico para nieve
+    snow = ndsi.gt(0.4)  # typical threshold for snow
 
-    # Contar píxeles nevados
     snow_pixel_count = snow.reduceRegion(
         reducer=ee.Reducer.sum(),
         geometry=roi,
@@ -39,7 +38,6 @@ def calculate_snow_area(image, roi):
         maxPixels=1e13
     ).get('NDSI')
 
-    # Contar píxeles totales en base a una banda (p. ej. B3)
     total_pixel_count = image.select(['B3']).reduceRegion(
         reducer=ee.Reducer.count(),
         geometry=roi,
@@ -48,9 +46,8 @@ def calculate_snow_area(image, roi):
         maxPixels=1e13
     ).get('B3')
 
-    # Convertir a valores locales (getInfo())
     if snow_pixel_count and total_pixel_count:
-        # Cada píxel es de 10m x 10m = 100m²
+        # Each pixel is 10m x 10m = 100m²
         snow_area = snow_pixel_count.getInfo() * 100
         total_area = total_pixel_count.getInfo() * 100
     else:
@@ -62,14 +59,12 @@ def calculate_snow_area(image, roi):
 
 def calculate_permanent_snow(image, roi):
     """
-    Calcula el área de nieve permanente (en m²) y la altura mínima para la geometría dada.
-    Utiliza NDSI (normalizado con B3 y B11) con un umbral de 0.4 para determinar si hay nieve.
+    Calculates the permanent snow area (in m²) and minimum snow-covered height for the given geometry.
+    Uses NDSI (normalized with B3 and B11) with a threshold of 0.4 to determine snow presence.
     """
-    # Índice de nieve
     ndsi = image.normalizedDifference(['B3', 'B11']).rename('NDSI')
-    snow = ndsi.gt(0.4)  # Umbral típico para nieve
+    snow = ndsi.gt(0.4)
 
-    # Contar píxeles nevados
     snow_pixel_count = snow.reduceRegion(
         reducer=ee.Reducer.sum(),
         geometry=roi,
@@ -78,8 +73,7 @@ def calculate_permanent_snow(image, roi):
         maxPixels=1e13
     ).get('NDSI')
 
-    # Obtener la altura mínima de los píxeles nevados
-    # Usamos la banda de elevación de SRTM
+    # Elevation data
     elevation = ee.Image('USGS/SRTMGL1_003')
     snow_elevation = elevation.updateMask(snow)
     min_elevation = snow_elevation.reduceRegion(
@@ -90,52 +84,70 @@ def calculate_permanent_snow(image, roi):
         maxPixels=1e13
     ).get('elevation')
 
-    # Convertir a valores locales (getInfo())
     snow_pixel_count_info = snow_pixel_count.getInfo()
     min_elevation_info = min_elevation.getInfo()
 
-    # Si no hay píxeles nevados o no se pudo obtener la elevación, retornar 0
     if snow_pixel_count_info is None or min_elevation_info is None:
         return 0.0, 0.0
 
-    # Cada píxel es de 10m x 10m = 100m²
+    # Each pixel = 10m x 10m = 100m²
     snow_area = snow_pixel_count_info * 100
     min_height = min_elevation_info
 
     return snow_area, min_height
 
 
+def reverse_geocode(lat, lon):
+    """
+    Calls Nominatim's reverse geocoding to obtain a region name or address.
+    This is a free service, but must be used responsibly (rate limits).
+    """
+    try:
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            'lat': lat,
+            'lon': lon,
+            'format': 'json',
+            'zoom': 10,  # zoom controls the detail level; 10 => region/city level
+            'addressdetails': 1
+        }
+        headers = {
+            'User-Agent': 'MySnowApp/1.0 (your_email@example.com)'  # Put your contact email
+        }
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            # Could use 'display_name' or parse 'address' fields
+            return data.get('display_name', 'Unknown region')
+        else:
+            print(f"Error from Nominatim: status code {response.status_code}")
+            return "Unknown region"
+    except Exception as e:
+        print(f"Exception in reverse_geocode: {e}")
+        return "Unknown region"
+
+
 @app.route('/snow-data', methods=['POST'])
 def get_snow_data():
     """
     Endpoint: POST /snow-data
-    Espera:
+    Expects:
         {
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [ [ [lat, lon], [lat, lon], ... ] ]  
+                "coordinates": [ [ [lat, lon], [lat, lon], ... ] ]
             },
             "start_date": "YYYY-MM-DD",
             "end_date": "YYYY-MM-DD"
         }
-    Devuelve:
+    Returns:
         {
-            "results": [
-                {
-                    "month": "YYYY-MM",
-                    "image_date": "YYYY-MM-DD",
-                    "image_id": "COPERNICUS/S2_SR_HARMONIZED/....",
-                    "snow_area_m2": ...,
-                    "total_area_m2": ...,
-                    "rgb_url": "...",
-                    "snow_url": "..."
-                },
-                ...
-            ],
+            "results": [...],
             "permanent_snow": {
                 "area_m2": ...,
                 "min_height_m": ...,
-                "total_area_m2": ...
+                "total_area_m2": ...,
+                "region_name": ...
             }
         }
     """
@@ -143,30 +155,31 @@ def get_snow_data():
         data = request.get_json()
         print(f"Received request data: {data}")
 
-        # Recibir geometría y fechas
         geometry = data.get('geometry')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
 
         if not geometry or not start_date or not end_date:
-            return jsonify({'error': 'Faltan parámetros'}), 400
+            return jsonify({'error': 'Missing parameters'}), 400
 
-        # Intercambiar lat/lon a lon/lat para Earth Engine
+        # Switch [lat, lon] => [lon, lat] for Earth Engine
         coordinates = geometry.get('coordinates', [])
         formatted_coords = []
         for poly in coordinates:
             processed_poly = []
             for point in poly:
-                # [lat, lon] -> [lon, lat]
                 processed_poly.append([point[1], point[0]])
             formatted_coords.append(processed_poly)
 
         roi = ee.Geometry.Polygon(formatted_coords)
 
-        # Calcular área total del polígono
-        total_area = roi.area().getInfo()
+        # Calculate centroid to do a simple reverse geocoding
+        centroid = roi.centroid()
+        centroid_coords = centroid.coordinates().getInfo()  # [lon, lat]
+        lon_center, lat_center = centroid_coords[0], centroid_coords[1]
+        region_name = reverse_geocode(lat_center, lon_center)
 
-        # Filtrar colección de imágenes Sentinel-2
+        # Filter Sentinel-2 images
         collection = (
             ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
             .filterBounds(roi)
@@ -180,55 +193,48 @@ def get_snow_data():
         print(f"Total images in period: {collection_size}")
 
         if collection_size == 0:
-            return jsonify({'error': 'No se encontraron imágenes para la región y período seleccionado'}), 404
+            return jsonify({'error': 'No images found for the region and date range'}), 404
 
-        # Añadir propiedad 'month' = YYYY-MM a cada imagen
+        # Add 'month' property to each image
         collection_with_month = collection.map(
             lambda img: img.set('month', img.date().format('YYYY-MM'))
         )
 
-        # Obtener la lista de meses distintos (como objetos de Python)
         distinct_months = collection_with_month.aggregate_array('month').distinct().sort().getInfo()
         print(f"Distinct months found: {distinct_months}")
 
         results = []
         permanent_snow_area = 0
         min_snow_height = float('inf')
-        max_snow_area = 0  # Track maximum snow area observed
+        max_snow_area = 0
 
-        # Para cada mes en la lista, tomamos la PRIMERA imagen (que estará menos nublada, por .sort anterior)
         for month in distinct_months:
-            # Filtrar por ese mes
             monthly_col = collection_with_month.filterMetadata('month', 'equals', month)
             if monthly_col.size().getInfo() == 0:
                 continue
 
-            # Tomar la primera imagen (menor nubosidad)
+            # Take first image with the lowest cloud coverage
             best_img = ee.Image(monthly_col.first())
 
-            # Calcular nieve y área total
+            # Calculate snow area
             snow_area, total_area = calculate_snow_area(best_img, roi)
 
-            # Update maximum snow area if current snow area is larger
+            # Track maximum snow area
             max_snow_area = max(max_snow_area, snow_area)
 
-            # Calcular nieve permanente y altura mínima
+            # Permanent snow
             perm_snow_area, min_height = calculate_permanent_snow(best_img, roi)
             permanent_snow_area = max(permanent_snow_area, perm_snow_area)
             if min_height > 0:
                 min_snow_height = min(min_snow_height, min_height)
 
-            # Obtener fecha real de esa "imagen ganadora"
+            # Get actual date from the "best image"
             image_date = best_img.date().format('YYYY-MM-dd').getInfo()
             image_id = best_img.id().getInfo()
 
-            # Generar URLs de miniatura
+            # Generate thumbnail URLs
             try:
-                # Get the bounding box of the ROI
                 roi_bounds = roi.bounds()
-                
-                # RGB
-                # Create a clipped version of the image that only shows the ROI
                 clipped_rgb = best_img.clip(roi)
                 rgb_url = clipped_rgb.getThumbURL({
                     'region': roi_bounds,
@@ -239,10 +245,8 @@ def get_snow_data():
                     'bands': 'B4,B3,B2'
                 })
 
-                # Máscara de nieve
                 ndsi = best_img.normalizedDifference(['B3', 'B11']).rename('NDSI')
                 snow_mask = ndsi.gt(0.4)
-                # Create a clipped version that combines snow detection with ROI
                 clipped_snow = snow_mask.clip(roi)
                 snow_vis = ee.Image.cat([
                     clipped_snow.rename('snow'),
@@ -270,7 +274,6 @@ def get_snow_data():
                 'snow_url': snow_url
             })
 
-        # Si no se encontró nieve permanente, establecer altura mínima a 0
         if min_snow_height == float('inf'):
             min_snow_height = 0
 
@@ -279,13 +282,14 @@ def get_snow_data():
             'permanent_snow': {
                 'area_m2': permanent_snow_area,
                 'min_height_m': min_snow_height,
-                'total_area_m2': max_snow_area  # Use maximum snow area instead of polygon area
+                'total_area_m2': max_snow_area,  # or total polygon area if you prefer
+                'region_name': region_name
             }
         })
 
     except Exception as e:
         print(f"Unexpected error: {e}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/dummy', methods=['GET'])
@@ -294,5 +298,5 @@ def dummy():
 
 
 if __name__ == '__main__':
-    # Ajusta el host/puerto según tu entorno
+    # Adjust host/port for your environment
     app.run(host="0.0.0.0", port=5000, debug=True)
